@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OtomaX Token Generator API</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script>
+        function generateToken() {
+            try {
+                // Ambil parameter dari URL dan decode URI component
+                const urlParams = new URLSearchParams(window.location.search);
+                const appId = decodeURIComponent(urlParams.get('appid') || '');
+                const appKey = decodeURIComponent(urlParams.get('appkey') || '');
+                const devKey = decodeURIComponent(urlParams.get('devkey') || '');
+                let payload = decodeURIComponent(urlParams.get('payload') || '');
+
+                // Validasi parameter
+                if (!appId || !appKey || !devKey || !payload) {
+                    throw new Error("Semua parameter wajib diisi: appid, appkey, devkey, payload");
+                }
+
+                // Handle payload JSON (support both raw JSON and URI encoded)
+                try {
+                    JSON.parse(payload); // Validasi format JSON
+                } catch {
+                    payload = decodeURIComponent(payload); // Double decode jika diperlukan
+                    JSON.parse(payload); // Validasi ulang
+                }
+
+                // 1. Encode Metadata
+                const metadata = CryptoJS.enc.Base64.stringify(
+                    CryptoJS.enc.Utf8.parse(`{"id":"${appId}"}`)
+                ).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+                // 2. Generate Signature
+                const signatureKey = CryptoJS.HmacSHA256(appKey, devKey);
+                const signature = CryptoJS.HmacSHA256(payload, CryptoJS.enc.Base64.stringify(signatureKey));
+                const signatureB64 = CryptoJS.enc.Base64.stringify(signature)
+                    .replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+                const token = `${metadata}.${signatureB64}`;
+
+                // Kirim respon
+                const response = JSON.stringify({
+                    status: "success",
+                    token: token,
+                    timestamp: new Date().toISOString()
+                });
+
+                // Untuk App Inventor/Kodular
+                if (typeof window.AppInventor !== 'undefined') {
+                    window.AppInventor.setWebViewString(response);
+                } 
+                // Untuk WebView umum (Kodular/Android)
+                else if (typeof window.android !== 'undefined') {
+                    window.android.callback(response);
+                }
+                // Fallback
+                else {
+                    document.write(response);
+                }
+
+            } catch (e) {
+                const errorMsg = JSON.stringify({ 
+                    status: "error",
+                    message: e.message,
+                    details: "Pastikan: 1. Parameter lengkap 2. Payload valid JSON 3. URL di-encode"
+                });
+
+                if (typeof window.AppInventor !== 'undefined') {
+                    window.AppInventor.setWebViewString(errorMsg);
+                } else {
+                    document.write(errorMsg);
+                }
+            }
+        }
+
+        // Jalankan saat halaman siap
+        if (document.readyState === 'complete') {
+            generateToken();
+        } else {
+            window.addEventListener('load', generateToken);
+        }
+    </script>
+</head>
+<body>
+    <!-- Konten dinamis akan diisi oleh JavaScript -->
+    <noscript>
+        <h1>Error: JavaScript diperlukan untuk generate token.</h1>
+    </noscript>
+</body>
+</html>
